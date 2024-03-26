@@ -1,8 +1,20 @@
 #include <iostream>
 #include  "src/yolov5/yolov5.hpp"
+#include "src/Uart/uart.hpp"
+#include <iomanip>
+#include <cmath>
+#include <unistd.h>
 
 int main(int argc, char** argv) {
-            YOLOV5 yolo;
+        int argvs;
+
+                while ((argvs = getopt(argc, argv, "a::s::g::m::c::f::R")) != -1)
+    {
+        switch (argvs)
+        {
+        case 'a':
+        {
+ YOLOV5 yolo;
             yolo_data data;
                cv::VideoCapture capture(0);
             if (!capture.isOpened()) {
@@ -48,4 +60,39 @@ int main(int argc, char** argv) {
             }
                      capture.release();
  
+        }break;
+        case 's':
+        {
+            int fd = open("/dev/ttyUSB0",O_RDWR | O_NOCTTY);
+            char buff[3];
+            char buff2[6] = {01,02,22,33,44,66};
+            set_serial(fd,115200,8,'N',1);
+            while (true)
+            {
+                serial_write(fd,buff2,6);
+                // read(fd,buff,8);
+                // if(buff[0]==0x01 && buff[1]==77)
+                // {
+                //     std::cout<<"data "<<(int)buff[2]<<"\r\n";
+                // }
+                // else{
+                //     std::cout<<"error"<<"\r\n";
+                // }
+                usleep(1000000);
+            }
+            
+        }break;
+        case 'g':
+        {
+            int fd = open("/dev/ttyUSB0",O_RDWR | O_NOCTTY);
+            char buff[3];
+            char buff2[6] = {01,02,77,00,00,00};
+            set_serial(fd,115200,8,'N',1);
+  
+            serial_write(fd,buff2,6);
+            
+        }break;
+    }
+           
+}
 }
