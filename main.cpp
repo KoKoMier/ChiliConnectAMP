@@ -4,9 +4,6 @@
 #include <iomanip>
 #include <cmath>
 #include <unistd.h>
-#include "Drive_Json.hpp"
-
-void configSettle(const char *configDir, APMSettinngs &APMInit);
 
 int main(int argc, char **argv)
 {
@@ -16,15 +13,6 @@ int main(int argc, char **argv)
     {
         switch (argvs)
         {
-        case 'h':
-        {
-            std::cout << "-a for start"
-                      << "\r\n";
-            std::cout << "-s for uart_send test"
-                      << "\r\n";
-            std::cout << "-g for json test"
-                      << "\r\n";
-        }
         case 'a':
         {
             YOLOV5 yolo;
@@ -47,26 +35,37 @@ int main(int argc, char **argv)
                     break;
                 }
                 data = yolo.yolov5(frame);
+
+                double max_confidence = 0.0;
+                cv::Rect max_conf_rect;
                 for (auto &obj : data.detections)
                 {
-                    // Ê¹ÓÃobj.bboxÀ´»ñÈ¡±ß½ç¿ò
-                    // cv::Rect bbox = cv::Rect(static_cast<int>(obj.bbox[0]),
-                    //                  static_cast<int>(obj.bbox[1]),
-                    //                  static_cast<int>(obj.bbox[2]),
-                    //                  static_cast<int>(obj.bbox[3]));                    // Ê¹ÓÃobj.labelÀ´»ñÈ¡Àà±ð±êÇ©
-                    std::cout << "obj0" << obj.bbox[0] << "\r\n";
-                    std::cout << "obj1" << obj.bbox[1] << "\r\n";
-                    std::cout << "obj2" << obj.bbox[2] << "\r\n";
-                    std::cout << "obj3" << obj.bbox[3] << "\r\n";
-                    // ÔÚÍ¼ÏñÉÏ»æÖÆ±ß½ç¿òºÍÀà±ð±êÇ©
-                    // cv::rectangle(frame, bbox, cv::Scalar(0, 255, 0), 2);
+                    if (obj.conf > max_confidence)
+                    {
+                        max_confidence = obj.conf;
+                        max_conf_rect = get_rect(frame, obj.bbox);
+                    }
+                }
 
+                if (max_confidence > 0.0)
+                {
+                    std::cout << "Max confidence rect x: " << max_conf_rect.x << ", y: " << max_conf_rect.y << std::endl;
+                    std::cout << "Max confidence rect area: " << max_conf_rect.area() << std::endl;//4000 --- 30cm
+                }
+
+                for (auto &obj : data.detections)
+                {
                     cv::Rect r = get_rect(frame, obj.bbox);
 
                     cv::rectangle(frame, r, cv::Scalar(0x27, 0xC1, 0x36), 2);
                     std::string label = my_classes[(int)obj.class_id];
-                    cv::putText(frame, label, cv::Point(r.x, r.y - 1), cv::FONT_HERSHEY_PLAIN, 1.2, cv::Scalar(0xFF, 0xFF, 0xFF), 2);
+                    char score_str[8];
+                    sprintf(score_str, "%.2f", obj.conf);
+                    std::string conf(score_str);
+                    std::string label_with_conf = label + " " + conf;
+                    cv::putText(frame, label_with_conf, cv::Point(r.x, r.y - 1), cv::FONT_HERSHEY_PLAIN, 1.2, cv::Scalar(0xFF, 0xFF, 0xFF), 2);
                 }
+
                 cv::imshow("yolov5", frame);
                 key = cv::waitKey(1);
                 if (key == 'q')
@@ -81,40 +80,52 @@ int main(int argc, char **argv)
         {
             int fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
             char buff[3];
-            char buff2[6] = {01, 02, 22, 33, 44, 66};
+            int a = 0;
+            char buff2[6] = {01, 02, 0, 33, 44, 1};
             set_serial(fd, 115200, 8, 'N', 1);
+            char key;
+
             while (true)
             {
-                serial_write(fd, buff2, 6);
-                // read(fd,buff,8);
-                // if(buff[0]==0x01 && buff[1]==77)
-                // {
-                //     std::cout<<"data "<<(int)buff[2]<<"\r\n";
-                // }
-                // else{
-                //     std::cout<<"error"<<"\r\n";
-                // }
-                usleep(1000000);
+                std::cin >> key;
+                if (key == 'w')
+                {
+
+                    buff2[2] += 10; // 按下w时，第三个数据加10
+                    std::cout << "buff2[2]" << int(buff2[2]) << "\r\n";
+                    serial_write(fd, buff2, 6); // 发送数据
+                }
+                else if (key == 'e')
+                {
+                    buff2[2] -= 10; // 按下e时，第三个数据减10
+                    std::cout << "buff2[2]" << int(buff2[2]) << "\r\n";
+                    serial_write(fd, buff2, 6); // 发送数据
+                }
+                else if (key == 'r')
+                {
+                    buff2[4] -= 5; // 按下e时，第三个数据减5
+                    std::cout << "buff2[3]" << int(buff2[4]) << "\r\n";
+                    serial_write(fd, buff2, 6); // 发送数据
+                }
+                else if (key == 't')
+                {
+                    buff2[4] += 5; // 按下e时，第三个数据减5
+                    std::cout << "buff2[3]" << int(buff2[4]) << "\r\n";
+                    serial_write(fd, buff2, 6); // 发送数据
+                }
             }
         }
         break;
         case 'g':
         {
+            int fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
+            char buff[3];
+            char buff2[6] = {01, 02, 70, 00, 00, 00};
+            set_serial(fd, 115200, 8, 'N', 1);
 
+            serial_write(fd, buff2, 6);
         }
         break;
         }
     }
 }
-
-void configSettle(const char *configDir, APMSettinngs &APMInit)
-{
-    std::ifstream config(configDir);
-    std::string content((std::istreambuf_iterator<char>(config)),
-                        (std::istreambuf_iterator<char>()));
-    nlohmann::json Mas = nlohmann::json::parse(content);
-    //==========================================================Device Type=======/
-
-}
-
-
