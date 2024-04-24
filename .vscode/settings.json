@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "ostream": "cpp",
+        "iosfwd": "cpp",
+        "iostream": "cpp",
+        "*.ipp": "cpp",
+        "memory": "cpp",
+        "condition_variable": "cpp",
+        "__mutex_base": "cpp"
+    }
+}

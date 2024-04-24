@@ -19,7 +19,7 @@ int serial_write(int fd, char *data, int datalen)
     int len = 0;
     // 获取实际传输数据的长度
     len = write(fd, data, datalen);
-    printf("send data OK! datalen=%d\n", len);
+    // printf("send data OK! datalen=%d\n", len);
     return len;
 }
 

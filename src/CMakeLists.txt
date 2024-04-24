@@ -9,4 +9,3 @@ INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
 target_link_libraries(src ${OpenCV_LIBS})
 
-
