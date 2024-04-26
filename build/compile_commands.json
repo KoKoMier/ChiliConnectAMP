@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/home/cyh/ChiliConnectAPM/build",
+  "command": "/usr/bin/aarch64-linux-gnu-g++   -I/usr/local/cuda/include -I/usr/include/x86_64-linux-gnu -isystem /usr/local/include/opencv4  -g   -std=gnu++11 -o CMakeFiles/ChiliAPM.dir/main.cpp.o -c /home/cyh/ChiliConnectAPM/main.cpp",
+  "file": "/home/cyh/ChiliConnectAPM/main.cpp"
+},
+{
+  "directory": "/home/cyh/ChiliConnectAPM/build/src",
+  "command": "/usr/bin/aarch64-linux-gnu-g++   -isystem /usr/local/include/opencv4  -g   -std=gnu++11 -o CMakeFiles/src.dir/yolov5/yolov5.cpp.o -c /home/cyh/ChiliConnectAPM/src/yolov5/yolov5.cpp",
+  "file": "/home/cyh/ChiliConnectAPM/src/yolov5/yolov5.cpp"
+}
+]
