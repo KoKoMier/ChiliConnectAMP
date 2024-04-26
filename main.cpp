@@ -21,15 +21,12 @@ int main(int argc, char **argv)
             std::cout << "./ChiliAPM -j Json_test"
                       << "\r\n";
         }
+        break;
         case 'a':
         {
-
             ChiliAPM APM_Settle;
             APM_Settle.ChiliAPMStartUp();
             APM_Settle.TaskThreadPrint();
- 
-
-      
         }
         break;
         case 's':
@@ -49,6 +46,7 @@ int main(int argc, char **argv)
             ChiliAPM APM_Settle;
             APM_Settle.Json_test();
         }
+        break;
         }
     }
 }
