@@ -1,6 +1,7 @@
 #include "src/ChiliAPM.hpp"
 
 double configSettle(const char *configDir, const char *Target);
+void SignalCatch(int Signal);
 
 int main(int argc, char **argv)
 {
@@ -13,7 +14,7 @@ int main(int argc, char **argv)
         case 'h':
         {
             std::cout << "./ChiliAPM -a detect start"
-            << "\r\n";
+                      << "\r\n";
             std::cout << "./ChiliAPM -s UartKey_test"
                       << "\r\n";
             std::cout << "./ChiliAPM -g Uartsend_test"
@@ -25,6 +26,8 @@ int main(int argc, char **argv)
         case 'a':
         {
             ChiliAPM APM_Settle;
+            signal(SIGINT, SignalCatch);
+            signal(SIGTERM, SignalCatch);
             APM_Settle.ChiliAPMStartUp();
             APM_Settle.TaskThreadPrint();
         }
@@ -51,3 +54,7 @@ int main(int argc, char **argv)
     }
 }
 
+void SignalCatch(int Signal)
+{
+	SystemSignal = Signal;
+};
