@@ -58,6 +58,9 @@ protected:
         int chili_z = 0;
         bool chili_cut = 0;
         char data_uart[6] = {01, 02, 0, 0, 0, 0};
+        int chili_x_compensation = 0;
+        int chili_y_compensation = 0;
+        int chili_z_compensation = 0;
 
     } DP;
 
@@ -70,7 +73,7 @@ private:
     struct DataConfig
     {
         int fd_uart;
-        int uart_baud;
+        int uart_baud = 9600;
         char key;
         double totalRedArea = 0.0;
         double detected_area = 0;
@@ -78,6 +81,7 @@ private:
         int json_test_data = 0;
         double max_confidence = 0.0;
         cv::Rect max_conf_rect;
+        std::string __UartDevice;
 
     } DC;
 
@@ -87,6 +91,7 @@ private:
     cv::Mat mask1, mask2, mask, hsv;
     double fps;
     cv::VideoCapture capture;
+    int capture_id;
 };
 
 ChiliAPM::~ChiliAPM()
@@ -96,9 +101,14 @@ ChiliAPM::~ChiliAPM()
 
 void ChiliAPM::RPiAPMInit()
 {
-    DC.uart_baud = 115200;
-
-    DC.fd_uart = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
+    DC.uart_baud = configSettle("../Chili.json", "uart_baud");
+    DC.__UartDevice = configSettle("../Chili.json", "uard_device");
+    DP.chili_x_compensation = configSettle("../Chili.json", "chili_x_compensation");
+    DP.chili_y_compensation = configSettle("../Chili.json", "chili_y_compensation");
+    DP.chili_z_compensation = configSettle("../Chili.json", "chili_z_compensation");
+    capture_id = configSettle("../Chili.json", "capture_id");
+    DC.detected_area_max = configSettle("../Chili.json", "detected_area_max");
+    DC.fd_uart = open(DC.__UartDevice.c_str(), O_RDWR | O_NOCTTY);
     if (DC.fd_uart < 0)
     {
         std::cerr << "Error opening serial port" << std::endl;
@@ -116,7 +126,7 @@ void ChiliAPM::YOLODetectTaskReg()
         {
             YOLOV5 yolo;
             yolo_data data;
-            capture.open(0);
+            capture.open(capture_id);
             if (!capture.isOpened())
             {
                 std::cout << "Error opening video stream or file" << std::endl;
@@ -217,6 +227,10 @@ void ChiliAPM::YOLODetectTaskReg()
                     capture.release();
                     break;
                 }
+                if (SystemSignal == SIGTERM || SystemSignal == SIGINT) {
+                    capture.release();
+                    break; 
+                }
             }
         },
         TF._flag_Sys_CPU_Asign, TF._flag_YOLOFlowFreq));//135156
@@ -227,9 +241,9 @@ void ChiliAPM::UartSendTaskReg()
     TF.UARTFlow.reset(new FlowThread(
         [&]
         {
-            DP.data_uart[2] = DP.chili_x;
-            DP.data_uart[3] = DP.chili_y;
-            DP.data_uart[4] = DP.chili_z;
+            DP.data_uart[2] = DP.chili_x+DP.chili_x_compensation;
+            DP.data_uart[3] = DP.chili_y+DP.chili_y_compensation;
+            DP.data_uart[4] = DP.chili_z+DP.chili_z_compensation;
             DP.data_uart[5] = DP.chili_cut;
             serial_write(DC.fd_uart, DP.data_uart, sizeof(data));
 
@@ -240,7 +254,7 @@ void ChiliAPM::UartSendTaskReg()
 
 void ChiliAPM::ChiliAPMStartUp()
 {
-    YOLODetectTaskReg();
+    // YOLODetectTaskReg();
 
     UartSendTaskReg();
 }
@@ -326,8 +340,12 @@ void ChiliAPM::saftycheck()
         TF._flag_Print_Task_Running = false;
         TF.UARTFlow->FlowStopAndWait();
         TF.YOLOFlow->FlowStopAndWait();
-        capture.release();
-        
+        {
+            int fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
+            set_serial(fd, 115200, 8, 'N', 1);
+            char buff2[6] = {01, 02, 0, 0, 0, 0};
+            serial_write(fd, buff2, 6);
+        }
         TF.UARTFlow.reset();
         TF.YOLOFlow.reset();
     }
@@ -356,8 +374,11 @@ void ChiliAPM::TaskThreadPrint()
     while (TF._flag_Print_Task_Running)
     {
         saftycheck();
-        std::cout << "runing: "<<TF._flag_Print_Task_Running
-                  << "\r\n";
+        std::cout << "\033[100A";
+        std::cout << "\033[K";
+        std::cout << "runing: "<<TF._flag_Print_Task_Running<< "\r\n";
+        std::cout << "uart_baud: "<<DC.uart_baud<< "\r\n";
         usleep(10000);
     }
 }
+
