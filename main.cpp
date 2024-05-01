@@ -1,6 +1,5 @@
 #include "src/ChiliAPM.hpp"
 
-double configSettle(const char *configDir, const char *Target);
 void SignalCatch(int Signal);
 
 int main(int argc, char **argv)
@@ -20,6 +19,8 @@ int main(int argc, char **argv)
             std::cout << "./ChiliAPM -g Uartsend_test"
                       << "\r\n";
             std::cout << "./ChiliAPM -j Json_test"
+                      << "\r\n";
+            std::cout << "./ChiliAPM -m mtf-02_test"
                       << "\r\n";
         }
         break;
@@ -50,11 +51,17 @@ int main(int argc, char **argv)
             APM_Settle.Json_test();
         }
         break;
+        case 'm':
+        {
+            ChiliAPM APM_Settle;
+            APM_Settle.MTF02_test();
+        }
+        break;
         }
     }
 }
 
 void SignalCatch(int Signal)
 {
-	SystemSignal = Signal;
+    SystemSignal = Signal;
 };

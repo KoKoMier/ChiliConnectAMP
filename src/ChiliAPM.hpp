@@ -4,15 +4,15 @@
 #include <unistd.h>
 #include <thread>
 #include <chrono>
-#include <signal.h> 
+#include <signal.h>
 #include <sys/time.h>
 #include "../Drive_Json.hpp"
 #include "ThreadsFlow/FlowController.hpp"
 #include "yolov5/yolov5.hpp"
 #include "Uart/uart.hpp"
+#include "MTF-02/MTF-02.hpp"
 
 inline volatile sig_atomic_t SystemSignal;
-
 
 class ChiliAPM
 {
@@ -29,6 +29,8 @@ public:
     void Uartsend_test();
 
     void UartKey_test();
+
+    void MTF02_test();
 
     void ChiliAPMStartUp();
 
@@ -67,6 +69,8 @@ protected:
 private:
     double configSettle(const char *configDir, const char *Target);
 
+    std::string  configSettleStr(const char *configDir, const char *Target);
+
     inline int GetTimestamp();
 
     void saftycheck();
@@ -92,6 +96,7 @@ private:
     double fps;
     cv::VideoCapture capture;
     int capture_id;
+    MTF02 *mtf02Test;
 };
 
 ChiliAPM::~ChiliAPM()
@@ -102,7 +107,8 @@ ChiliAPM::~ChiliAPM()
 void ChiliAPM::RPiAPMInit()
 {
     DC.uart_baud = configSettle("../Chili.json", "uart_baud");
-    DC.__UartDevice = configSettle("../Chili.json", "uard_device");
+    DC.__UartDevice = configSettleStr("../Chili.json", "uard_device");
+    DC.__MTF02Device = 
     DP.chili_x_compensation = configSettle("../Chili.json", "chili_x_compensation");
     DP.chili_y_compensation = configSettle("../Chili.json", "chili_y_compensation");
     DP.chili_z_compensation = configSettle("../Chili.json", "chili_z_compensation");
@@ -115,7 +121,8 @@ void ChiliAPM::RPiAPMInit()
         return;
     }
     set_serial(DC.fd_uart, DC.uart_baud, 8, 'N', 1);
-
+    mtf02Test = new MTF02("/dev/i2c-1", 0x31);
+    usleep(500);
 }
 
 void ChiliAPM::YOLODetectTaskReg()
@@ -151,11 +158,11 @@ void ChiliAPM::YOLODetectTaskReg()
                     std::cout << "Fail to read image from camera!" << std::endl;
                     break;
                 }
-                
+
                 data = yolo.yolov5(frame);
 
                 // 在处理每一帧之前重置最大置信度和矩形框
-                DC.max_confidence = 0.0; // 重置最大置信度
+                DC.max_confidence = 0.0;       // 重置最大置信度
                 DC.max_conf_rect = cv::Rect(); // 重置矩形框
                 for (auto &obj : data.detections)
                 {
@@ -165,7 +172,7 @@ void ChiliAPM::YOLODetectTaskReg()
                         DC.max_conf_rect = get_rect(frame, obj.bbox); // 更新最大置信度的矩形框
                     }
                 }
-                //用于计算物体的偏移量
+                // 用于计算物体的偏移量
                 if (DC.max_confidence > 0.0)
                 {
 
@@ -193,7 +200,7 @@ void ChiliAPM::YOLODetectTaskReg()
                     }
                 }
 
-                //用于计算红色的面积
+                // 用于计算红色的面积
                 cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
                 cv::inRange(hsv, cv::Scalar(0, 70, 50), cv::Scalar(10, 255, 255), mask1);    // 红色的低范围阈值
                 cv::inRange(hsv, cv::Scalar(170, 70, 50), cv::Scalar(180, 255, 255), mask2); // 红色的高范围阈值
@@ -206,16 +213,15 @@ void ChiliAPM::YOLODetectTaskReg()
                 for (size_t i = 0; i < contours.size(); i++)
                 {
                     double area = cv::contourArea(contours[i]); // 计算每个轮廓的面积
-                    DC.totalRedArea += area;                       // 累加红色区域的面积
+                    DC.totalRedArea += area;                    // 累加红色区域的面积
                 }
                 // 在原图上绘制轮廓
                 cv::drawContours(frame, contours, -1, cv::Scalar(0, 255, 0), 2); // 使用绿色绘制所有轮廓
 
-                //用于计算深度的距离
+                // 用于计算深度的距离
                 DC.detected_area = DC.max_conf_rect.width * DC.max_conf_rect.height; // 计算识别框的面积
-                if(1)
+                if (1)
                 {
-
                 }
 
                 cv::imshow("yolov5", frame);
@@ -227,13 +233,14 @@ void ChiliAPM::YOLODetectTaskReg()
                     capture.release();
                     break;
                 }
-                if (SystemSignal == SIGTERM || SystemSignal == SIGINT) {
+                if (SystemSignal == SIGTERM || SystemSignal == SIGINT)
+                {
                     capture.release();
-                    break; 
+                    break;
                 }
             }
         },
-        TF._flag_Sys_CPU_Asign, TF._flag_YOLOFlowFreq));//135156
+        TF._flag_Sys_CPU_Asign, TF._flag_YOLOFlowFreq)); // 135156
 }
 
 void ChiliAPM::UartSendTaskReg()
@@ -241,16 +248,14 @@ void ChiliAPM::UartSendTaskReg()
     TF.UARTFlow.reset(new FlowThread(
         [&]
         {
-            DP.data_uart[2] = DP.chili_x+DP.chili_x_compensation;
-            DP.data_uart[3] = DP.chili_y+DP.chili_y_compensation;
-            DP.data_uart[4] = DP.chili_z+DP.chili_z_compensation;
+            DP.data_uart[2] = DP.chili_x + DP.chili_x_compensation;
+            DP.data_uart[3] = DP.chili_y + DP.chili_y_compensation;
+            DP.data_uart[4] = DP.chili_z + DP.chili_z_compensation;
             DP.data_uart[5] = DP.chili_cut;
             serial_write(DC.fd_uart, DP.data_uart, sizeof(data));
-
         },
-        TF._flag_Sys_CPU_Asign, TF._flag_UARTFlowFreq));//354696
+        TF._flag_Sys_CPU_Asign, TF._flag_UARTFlowFreq)); // 354696
 }
-
 
 void ChiliAPM::ChiliAPMStartUp()
 {
@@ -260,7 +265,7 @@ void ChiliAPM::ChiliAPMStartUp()
 }
 
 void ChiliAPM::Json_test()
-{   
+{
     DC.json_test_data = configSettle("../Chili.json", "json_test_data");
     std::cout << "DC.json_test_data: " << DC.json_test_data << "\r\n";
 }
@@ -268,6 +273,23 @@ void ChiliAPM::Json_test()
 void ChiliAPM::Uartsend_test()
 {
     serial_write(DC.uart_baud, DP.data_uart, 6);
+}
+
+void ChiliAPM::MTF02_test()
+{
+    MTF02::MTF02Data Data;
+    while (true)
+    {
+        Data = mtf02Test->MTF02DataGet();
+        std::cout << " Speed_X " << Data.Speed_X << "\r\n";
+        std::cout << " Speed_Y " << Data.Speed_Y << "\r\n";
+        std::cout << " Speed_X " << Data.Pos_X << "\r\n";
+        std::cout << " Speed_Y " << Data.Pos_Y << "\r\n";
+        std::cout << " Distance " << Data.Distance << "\r\n";
+        std::cout << "\033[5A";
+        std::cout << "\033[K";
+        usleep(5000);
+    }
 }
 
 void ChiliAPM::UartKey_test()
@@ -349,7 +371,6 @@ void ChiliAPM::saftycheck()
         TF.UARTFlow.reset();
         TF.YOLOFlow.reset();
     }
-
 }
 
 double ChiliAPM::configSettle(const char *configDir, const char *Target)
@@ -360,6 +381,16 @@ double ChiliAPM::configSettle(const char *configDir, const char *Target)
     nlohmann::json Configdata = nlohmann::json::parse(content);
     return Configdata[Target].get<double>();
 }
+
+std::string  ChiliAPM::configSettleStr(const char *configDir, const char *Target)
+{
+    std::ifstream config(configDir);
+    std::string content((std::istreambuf_iterator<char>(config)),
+                        (std::istreambuf_iterator<char>()));
+    nlohmann::json Configdata = nlohmann::json::parse(content);
+    return Configdata[Target].get<std::string>();
+}
+
 
 inline int ChiliAPM::GetTimestamp()
 {
@@ -376,9 +407,8 @@ void ChiliAPM::TaskThreadPrint()
         saftycheck();
         std::cout << "\033[100A";
         std::cout << "\033[K";
-        std::cout << "runing: "<<TF._flag_Print_Task_Running<< "\r\n";
-        std::cout << "uart_baud: "<<DC.uart_baud<< "\r\n";
+        std::cout << "runing: " << TF._flag_Print_Task_Running << "\r\n";
+        std::cout << "uart_baud: " << DC.uart_baud << "\r\n";
         usleep(10000);
     }
 }
-
