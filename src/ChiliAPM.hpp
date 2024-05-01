@@ -38,6 +38,8 @@ public:
 
     void UartSendTaskReg();
 
+    void DistanceReadTaskReg();
+
     void TaskThreadPrint();
 
 protected:
@@ -45,12 +47,14 @@ protected:
     {
         const int _flag_Sys_CPU_Asign = 2;
         float _flag_UARTFlowFreq = 10.f;
+        float _flag_MTF02FlowFreq = 1000.f;
         float _flag_YOLOFlowFreq = 100.f;
 
         bool _flag_Print_Task_Running = false;
 
         std::unique_ptr<FlowThread> UARTFlow;
         std::unique_ptr<FlowThread> YOLOFlow;
+        std::unique_ptr<FlowThread> MTF02Flow;
     } TF;
 
     struct DataProcess
@@ -63,13 +67,13 @@ protected:
         int chili_x_compensation = 0;
         int chili_y_compensation = 0;
         int chili_z_compensation = 0;
-
+        double distance = 0;
     } DP;
 
 private:
     double configSettle(const char *configDir, const char *Target);
 
-    std::string  configSettleStr(const char *configDir, const char *Target);
+    std::string configSettleStr(const char *configDir, const char *Target);
 
     inline int GetTimestamp();
 
@@ -86,6 +90,7 @@ private:
         double max_confidence = 0.0;
         cv::Rect max_conf_rect;
         std::string __UartDevice;
+        std::string __MTF02Device;
 
     } DC;
 
@@ -97,6 +102,7 @@ private:
     cv::VideoCapture capture;
     int capture_id;
     MTF02 *mtf02Test;
+    MTF02::MTF02Data MTF02_Data;
 };
 
 ChiliAPM::~ChiliAPM()
@@ -108,12 +114,13 @@ void ChiliAPM::RPiAPMInit()
 {
     DC.uart_baud = configSettle("../Chili.json", "uart_baud");
     DC.__UartDevice = configSettleStr("../Chili.json", "uard_device");
-    DC.__MTF02Device = 
+    DC.__MTF02Device = configSettleStr("../Chili.json", "mtf02_device");
     DP.chili_x_compensation = configSettle("../Chili.json", "chili_x_compensation");
     DP.chili_y_compensation = configSettle("../Chili.json", "chili_y_compensation");
     DP.chili_z_compensation = configSettle("../Chili.json", "chili_z_compensation");
     capture_id = configSettle("../Chili.json", "capture_id");
     DC.detected_area_max = configSettle("../Chili.json", "detected_area_max");
+
     DC.fd_uart = open(DC.__UartDevice.c_str(), O_RDWR | O_NOCTTY);
     if (DC.fd_uart < 0)
     {
@@ -121,8 +128,18 @@ void ChiliAPM::RPiAPMInit()
         return;
     }
     set_serial(DC.fd_uart, DC.uart_baud, 8, 'N', 1);
-    mtf02Test = new MTF02("/dev/i2c-1", 0x31);
+    mtf02Test = new MTF02(DC.__MTF02Device.c_str(), 0x31);
     usleep(500);
+}
+
+void ChiliAPM::DistanceReadTaskReg()
+{
+    TF.MTF02Flow.reset(new FlowThread(
+        [&]
+        {
+            MTF02_Data = mtf02Test->MTF02DataGet();
+        },
+        TF._flag_Sys_CPU_Asign, TF._flag_MTF02FlowFreq));
 }
 
 void ChiliAPM::YOLODetectTaskReg()
@@ -261,6 +278,8 @@ void ChiliAPM::ChiliAPMStartUp()
 {
     // YOLODetectTaskReg();
 
+    DistanceReadTaskReg();
+
     UartSendTaskReg();
 }
 
@@ -277,15 +296,14 @@ void ChiliAPM::Uartsend_test()
 
 void ChiliAPM::MTF02_test()
 {
-    MTF02::MTF02Data Data;
     while (true)
     {
-        Data = mtf02Test->MTF02DataGet();
-        std::cout << " Speed_X " << Data.Speed_X << "\r\n";
-        std::cout << " Speed_Y " << Data.Speed_Y << "\r\n";
-        std::cout << " Speed_X " << Data.Pos_X << "\r\n";
-        std::cout << " Speed_Y " << Data.Pos_Y << "\r\n";
-        std::cout << " Distance " << Data.Distance << "\r\n";
+        MTF02_Data = mtf02Test->MTF02DataGet();
+        std::cout << " Speed_X " << MTF02_Data.Speed_X << "\r\n";
+        std::cout << " Speed_Y " << MTF02_Data.Speed_Y << "\r\n";
+        std::cout << " Speed_X " << MTF02_Data.Pos_X << "\r\n";
+        std::cout << " Speed_Y " << MTF02_Data.Pos_Y << "\r\n";
+        std::cout << " Distance " << MTF02_Data.Distance << "\r\n";
         std::cout << "\033[5A";
         std::cout << "\033[K";
         usleep(5000);
@@ -382,7 +400,7 @@ double ChiliAPM::configSettle(const char *configDir, const char *Target)
     return Configdata[Target].get<double>();
 }
 
-std::string  ChiliAPM::configSettleStr(const char *configDir, const char *Target)
+std::string ChiliAPM::configSettleStr(const char *configDir, const char *Target)
 {
     std::ifstream config(configDir);
     std::string content((std::istreambuf_iterator<char>(config)),
@@ -390,7 +408,6 @@ std::string  ChiliAPM::configSettleStr(const char *configDir, const char *Target
     nlohmann::json Configdata = nlohmann::json::parse(content);
     return Configdata[Target].get<std::string>();
 }
-
 
 inline int ChiliAPM::GetTimestamp()
 {
@@ -407,6 +424,7 @@ void ChiliAPM::TaskThreadPrint()
         saftycheck();
         std::cout << "\033[100A";
         std::cout << "\033[K";
+        std::cout << std::setw(7) << std::setfill(' ')<< " Distance " << MTF02_Data.Distance << "\r\n";
         std::cout << "runing: " << TF._flag_Print_Task_Running << "\r\n";
         std::cout << "uart_baud: " << DC.uart_baud << "\r\n";
         usleep(10000);

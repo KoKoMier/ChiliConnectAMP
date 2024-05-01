@@ -2,6 +2,7 @@
     "json_test_data": 2,
     "uart_baud": 115200,
     "uard_device":"/dev/ttyUSB0",
+    "mtf02_device":"/dev/i2c-1",
     "chili_x_compensation": 0,
     "chili_y_compensation": 0,
     "chili_z_compensation": 0,
