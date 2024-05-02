@@ -41,7 +41,7 @@ int main(int argc, char **argv)
         break;
         case 'g':
         {
-            ChiliAPM APM_Settle;
+            ChiliAPM APM_Settle;    
             APM_Settle.Uartsend_test();
         }
         break;

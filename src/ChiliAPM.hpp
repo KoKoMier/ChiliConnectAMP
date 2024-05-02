@@ -128,6 +128,7 @@ void ChiliAPM::RPiAPMInit()
         return;
     }
     set_serial(DC.fd_uart, DC.uart_baud, 8, 'N', 1);
+    usleep(500);
     mtf02Test = new MTF02(DC.__MTF02Device.c_str(), 0x31);
     usleep(500);
 }
@@ -276,9 +277,9 @@ void ChiliAPM::UartSendTaskReg()
 
 void ChiliAPM::ChiliAPMStartUp()
 {
-    // YOLODetectTaskReg();
+    YOLODetectTaskReg();
 
-    DistanceReadTaskReg();
+    // DistanceReadTaskReg();
 
     UartSendTaskReg();
 }
@@ -318,57 +319,57 @@ void ChiliAPM::UartKey_test()
         if (DC.key == 'w')
         {
 
-            DP.data_uart[2] += 10; // 按下w时，第三个数据加10
+            DP.data_uart[2] += 10; // 右转
             std::cout << "buff2[2]" << int(DP.data_uart[2]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            serial_write(DC.fd_uart, DP.data_uart, 6); 
         }
         else if (DC.key == 'e')
         {
-            DP.data_uart[2] -= 10;
+            DP.data_uart[2] -= 10;// 左转
             std::cout << "buff2[2]" << int(DP.data_uart[2]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            serial_write(DC.fd_uart, DP.data_uart, 6); 
         }
         else if (DC.key == 'r')
         {
             DP.data_uart[4] -= 5;
-            std::cout << "buff2[3]" << int(DP.data_uart[4]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            std::cout << "buff2[4]" << int(DP.data_uart[4]) << "\r\n";
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 降低
         }
         else if (DC.key == 't')
         {
             DP.data_uart[4] += 5;
-            std::cout << "buff2[3]" << int(DP.data_uart[4]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            std::cout << "buff2[4]" << int(DP.data_uart[4]) << "\r\n";
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 升高
         }
         else if (DC.key == 'a')
         {
             DP.data_uart[5] = 0;
             std::cout << "buff2[5]" << int(DP.data_uart[5]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 开
         }
         else if (DC.key == 's')
         {
             DP.data_uart[5] = 1;
             std::cout << "buff2[5]" << int(DP.data_uart[5]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 剪
         }
         else if (DC.key == 'z')
         {
             DP.data_uart[3] = 0;
             std::cout << "buff2[3]" << int(DP.data_uart[3]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 不动
         }
         else if (DC.key == 'x')
         {
             DP.data_uart[3] = 1;
             std::cout << "buff2[3]" << int(DP.data_uart[3]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            serial_write(DC.fd_uart, DP.data_uart, 6); //   前进
         }
         else if (DC.key == 'c')
         {
             DP.data_uart[3] = 2;
             std::cout << "buff2[3]" << int(DP.data_uart[3]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 发送数据
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 后退
         }
     }
 }
