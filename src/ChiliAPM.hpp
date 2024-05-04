@@ -6,6 +6,7 @@
 #include <chrono>
 #include <signal.h>
 #include <sys/time.h>
+#include <chrono>
 #include "../Drive_Json.hpp"
 #include "ThreadsFlow/FlowController.hpp"
 #include "yolov5/yolov5.hpp"
@@ -13,6 +14,8 @@
 #include "MTF-02/MTF-02.hpp"
 
 inline volatile sig_atomic_t SystemSignal;
+std::chrono::steady_clock::time_point lastCutTime;
+std::chrono::steady_clock::time_point delayStartTime;
 
 class ChiliAPM
 {
@@ -103,6 +106,7 @@ private:
     int capture_id;
     MTF02 *mtf02Test;
     MTF02::MTF02Data MTF02_Data;
+    int cut_mode = 0;
 };
 
 ChiliAPM::~ChiliAPM()
@@ -236,10 +240,24 @@ void ChiliAPM::YOLODetectTaskReg()
                 // 在原图上绘制轮廓
                 cv::drawContours(frame, contours, -1, cv::Scalar(0, 255, 0), 2); // 使用绿色绘制所有轮廓
 
-                // 用于计算深度的距离
                 DC.detected_area = DC.max_conf_rect.width * DC.max_conf_rect.height; // 计算识别框的面积
-                if (1)
+
+                if(MTF02_Data.Distance < 40 & DC.totalRedArea > 1190270)
                 {
+                    auto now = std::chrono::steady_clock::now();
+                    if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCutTime).count() > 10) {
+                        cut_mode = 1;
+                        lastCutTime = now; // 更新时间戳
+                        delayStartTime = now; // 开始两秒的延迟
+                    } else if (std::chrono::duration_cast<std::chrono::seconds>(now - delayStartTime).count() <= 5) {
+                        cut_mode = 1; // 在两秒内保持cut_mode为0
+                    } else {
+                        cut_mode = 0; // 两秒后，如果不再满足10秒的条件，则设置cut_mode为1
+                    }
+                }
+                else
+                {
+                    cut_mode = 0;
                 }
 
                 cv::imshow("yolov5", frame);
@@ -269,6 +287,14 @@ void ChiliAPM::UartSendTaskReg()
             DP.data_uart[2] = (DP.chili_x + DP.chili_x_compensation < -127) ? -127 : (DP.chili_x + DP.chili_x_compensation > 127 ? 127 : DP.chili_x + DP.chili_x_compensation);
             DP.data_uart[3] = (DP.chili_y + DP.chili_y_compensation < -127) ? -127 : (DP.chili_y + DP.chili_y_compensation > 127 ? 127 : DP.chili_y + DP.chili_y_compensation);
             DP.data_uart[4] = (DP.chili_z + DP.chili_z_compensation < -127) ? -127 : (DP.chili_z + DP.chili_z_compensation > 127 ? 127 : DP.chili_z + DP.chili_z_compensation);
+            if(cut_mode)
+            {
+                DP.chili_cut = 0;
+            }
+            else
+            {
+                DP.chili_cut = 1;
+            }
             DP.data_uart[5] = DP.chili_cut;
             serial_write(DC.fd_uart, DP.data_uart, sizeof(data));
         },
@@ -279,7 +305,7 @@ void ChiliAPM::ChiliAPMStartUp()
 {
     YOLODetectTaskReg();
 
-    // DistanceReadTaskReg();
+    DistanceReadTaskReg();
 
     UartSendTaskReg();
 }
@@ -345,13 +371,13 @@ void ChiliAPM::UartKey_test()
         {
             DP.data_uart[5] = 0;
             std::cout << "buff2[5]" << int(DP.data_uart[5]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 开
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 剪
         }
         else if (DC.key == 's')
         {
             DP.data_uart[5] = 1;
             std::cout << "buff2[5]" << int(DP.data_uart[5]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); // 剪
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 开
         }
         else if (DC.key == 'z')
         {
@@ -427,10 +453,11 @@ void ChiliAPM::TaskThreadPrint()
         std::cout << "\033[100A";
         std::cout << "\033[K";
         std::cout << std::setw(7) << std::setfill(' ')<< " Distance " << MTF02_Data.Distance << "\r\n";
-        std::cout << "runing: " << TF._flag_Print_Task_Running << "\r\n";
-        std::cout << "uart_baud: " << DC.uart_baud << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ')<< " DC.totalRedArea " << DC.totalRedArea<< "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ')<< " DP.chili_cut " << DP.chili_cut<< "\r\n";
         std::cout << "chili_z: " << DP.chili_z << "\r\n";
         std::cout << "chili_x: " << DP.chili_x << "\r\n";
         usleep(10000);
     }
 }
+
