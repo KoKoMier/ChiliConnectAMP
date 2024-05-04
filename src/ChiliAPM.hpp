@@ -266,9 +266,9 @@ void ChiliAPM::UartSendTaskReg()
     TF.UARTFlow.reset(new FlowThread(
         [&]
         {
-            DP.data_uart[2] = DP.chili_x + DP.chili_x_compensation;
-            DP.data_uart[3] = DP.chili_y + DP.chili_y_compensation;
-            DP.data_uart[4] = DP.chili_z + DP.chili_z_compensation;
+            DP.data_uart[2] = (DP.chili_x + DP.chili_x_compensation < -127) ? -127 : (DP.chili_x + DP.chili_x_compensation > 127 ? 127 : DP.chili_x + DP.chili_x_compensation);
+            DP.data_uart[3] = (DP.chili_y + DP.chili_y_compensation < -127) ? -127 : (DP.chili_y + DP.chili_y_compensation > 127 ? 127 : DP.chili_y + DP.chili_y_compensation);
+            DP.data_uart[4] = (DP.chili_z + DP.chili_z_compensation < -127) ? -127 : (DP.chili_z + DP.chili_z_compensation > 127 ? 127 : DP.chili_z + DP.chili_z_compensation);
             DP.data_uart[5] = DP.chili_cut;
             serial_write(DC.fd_uart, DP.data_uart, sizeof(data));
         },
@@ -381,10 +381,11 @@ void ChiliAPM::saftycheck()
         TF._flag_Print_Task_Running = false;
         TF.UARTFlow->FlowStopAndWait();
         TF.YOLOFlow->FlowStopAndWait();
+        usleep(10000);
         {
             int fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
             set_serial(fd, 115200, 8, 'N', 1);
-            char buff2[6] = {01, 02, 0, 0, 0, 0};
+            char buff2[6] = {01, 02, 1, 0, 1, 0};
             serial_write(fd, buff2, 6);
         }
         TF.UARTFlow.reset();
@@ -428,6 +429,8 @@ void ChiliAPM::TaskThreadPrint()
         std::cout << std::setw(7) << std::setfill(' ')<< " Distance " << MTF02_Data.Distance << "\r\n";
         std::cout << "runing: " << TF._flag_Print_Task_Running << "\r\n";
         std::cout << "uart_baud: " << DC.uart_baud << "\r\n";
+        std::cout << "chili_z: " << DP.chili_z << "\r\n";
+        std::cout << "chili_x: " << DP.chili_x << "\r\n";
         usleep(10000);
     }
 }
