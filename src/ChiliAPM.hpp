@@ -94,7 +94,8 @@ private:
         cv::Rect max_conf_rect;
         std::string __UartDevice;
         std::string __MTF02Device;
-
+        int Distance_Target = 40;
+        double totalRedArea_Target = 1190270;
     } DC;
 
     char score_str[8];
@@ -124,7 +125,9 @@ void ChiliAPM::RPiAPMInit()
     DP.chili_z_compensation = configSettle("../Chili.json", "chili_z_compensation");
     capture_id = configSettle("../Chili.json", "capture_id");
     DC.detected_area_max = configSettle("../Chili.json", "detected_area_max");
-
+    DC.Distance_Target =  configSettle("../Chili.json", "Distance_Target");
+    DC.totalRedArea_Target =  configSettle("../Chili.json", "totalRedArea_Target");
+    
     DC.fd_uart = open(DC.__UartDevice.c_str(), O_RDWR | O_NOCTTY);
     if (DC.fd_uart < 0)
     {
@@ -232,6 +235,7 @@ void ChiliAPM::YOLODetectTaskReg()
                 // 接下来可以使用mask进行轮廓查找等操作
                 std::vector<std::vector<cv::Point>> contours;
                 cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+                DC.totalRedArea = 0;
                 for (size_t i = 0; i < contours.size(); i++)
                 {
                     double area = cv::contourArea(contours[i]); // 计算每个轮廓的面积
@@ -242,17 +246,17 @@ void ChiliAPM::YOLODetectTaskReg()
 
                 DC.detected_area = DC.max_conf_rect.width * DC.max_conf_rect.height; // 计算识别框的面积
 
-                if(MTF02_Data.Distance < 40 & DC.totalRedArea > 1190270)
+                if (MTF02_Data.Distance < DC.Distance_Target & DC.totalRedArea > DC.totalRedArea_Target & MTF02_Data.Distance != 0)
                 {
                     auto now = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCutTime).count() > 10) {
+                    if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCutTime).count() > 10)
+                    {
                         cut_mode = 1;
                         lastCutTime = now; // 更新时间戳
-                        delayStartTime = now; // 开始两秒的延迟
-                    } else if (std::chrono::duration_cast<std::chrono::seconds>(now - delayStartTime).count() <= 5) {
-                        cut_mode = 1; // 在两秒内保持cut_mode为0
-                    } else {
-                        cut_mode = 0; // 两秒后，如果不再满足10秒的条件，则设置cut_mode为1
+                    }
+                    else
+                    {
+                        cut_mode = 0;
                     }
                 }
                 else
@@ -287,13 +291,13 @@ void ChiliAPM::UartSendTaskReg()
             DP.data_uart[2] = (DP.chili_x + DP.chili_x_compensation < -127) ? -127 : (DP.chili_x + DP.chili_x_compensation > 127 ? 127 : DP.chili_x + DP.chili_x_compensation);
             DP.data_uart[3] = (DP.chili_y + DP.chili_y_compensation < -127) ? -127 : (DP.chili_y + DP.chili_y_compensation > 127 ? 127 : DP.chili_y + DP.chili_y_compensation);
             DP.data_uart[4] = (DP.chili_z + DP.chili_z_compensation < -127) ? -127 : (DP.chili_z + DP.chili_z_compensation > 127 ? 127 : DP.chili_z + DP.chili_z_compensation);
-            if(cut_mode)
+            if (cut_mode)
             {
-                DP.chili_cut = 0;
+                DP.chili_cut = 1;
             }
             else
             {
-                DP.chili_cut = 1;
+                DP.chili_cut = 0;
             }
             DP.data_uart[5] = DP.chili_cut;
             serial_write(DC.fd_uart, DP.data_uart, sizeof(data));
@@ -347,13 +351,13 @@ void ChiliAPM::UartKey_test()
 
             DP.data_uart[2] += 10; // 右转
             std::cout << "buff2[2]" << int(DP.data_uart[2]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); 
+            serial_write(DC.fd_uart, DP.data_uart, 6);
         }
         else if (DC.key == 'e')
         {
-            DP.data_uart[2] -= 10;// 左转
+            DP.data_uart[2] -= 10; // 左转
             std::cout << "buff2[2]" << int(DP.data_uart[2]) << "\r\n";
-            serial_write(DC.fd_uart, DP.data_uart, 6); 
+            serial_write(DC.fd_uart, DP.data_uart, 6);
         }
         else if (DC.key == 'r')
         {
@@ -452,12 +456,13 @@ void ChiliAPM::TaskThreadPrint()
         saftycheck();
         std::cout << "\033[100A";
         std::cout << "\033[K";
-        std::cout << std::setw(7) << std::setfill(' ')<< " Distance " << MTF02_Data.Distance << "\r\n";
-        std::cout << std::setw(7) << std::setfill(' ')<< " DC.totalRedArea " << DC.totalRedArea<< "\r\n";
-        std::cout << std::setw(7) << std::setfill(' ')<< " DP.chili_cut " << DP.chili_cut<< "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << " Distance " << MTF02_Data.Distance << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << " DC.totalRedArea " << DC.totalRedArea << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << " DP.chili_cut " << DP.chili_cut << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << " DC.Distance_Target " << DC.Distance_Target << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << " DC.totalRedArea_Target " << DC.totalRedArea_Target << "\r\n";
         std::cout << "chili_z: " << DP.chili_z << "\r\n";
         std::cout << "chili_x: " << DP.chili_x << "\r\n";
         usleep(10000);
     }
 }
-

@@ -7,6 +7,8 @@
     "chili_y_compensation": 0,
     "chili_z_compensation": 0,
     "capture_id": 0,
-    "detected_area_max": 20000
+    "detected_area_max": 20000,
+    "Distance_Target":40,
+    "totalRedArea_Target":30000
 
 }
