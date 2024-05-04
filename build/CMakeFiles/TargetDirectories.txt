@@ -1,0 +1,7 @@
+/home/cyh/ChiliConnectAPM/build/CMakeFiles/rebuild_cache.dir
+/home/cyh/ChiliConnectAPM/build/CMakeFiles/edit_cache.dir
+/home/cyh/ChiliConnectAPM/build/CMakeFiles/myplugins.dir
+/home/cyh/ChiliConnectAPM/build/CMakeFiles/ChiliAPM.dir
+/home/cyh/ChiliConnectAPM/build/src/CMakeFiles/rebuild_cache.dir
+/home/cyh/ChiliConnectAPM/build/src/CMakeFiles/src.dir
+/home/cyh/ChiliConnectAPM/build/src/CMakeFiles/edit_cache.dir
