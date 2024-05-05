@@ -3,12 +3,14 @@
     "uart_baud": 115200,
     "uard_device":"/dev/ttyUSB0",
     "mtf02_device":"/dev/i2c-1",
+    "chili_y" : 2,
     "chili_x_compensation": 0,
     "chili_y_compensation": 0,
     "chili_z_compensation": 0,
     "capture_id": 0,
     "detected_area_max": 20000,
-    "Distance_Target":40,
-    "totalRedArea_Target":30000
+    "Distance_Target":45,
+    "Distance_Back":10,
+    "totalRedArea_Target":10000
 
 }
