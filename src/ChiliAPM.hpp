@@ -218,7 +218,7 @@ void ChiliAPM::YOLODetectTaskReg()
                     {
                         DP.chili_x++; // 计数器加一
                     }
-                    if (DC.max_conf_rect.y + DC.max_conf_rect.height / 2 < 2 * frame.rows / 3) // 如果物体在图像中间的上面部分
+                    if (DC.max_conf_rect.y + DC.max_conf_rect.height / 2 < 0.66 * frame.rows ) // 如果物体在图像中间的上面部分
                     {
                         DP.chili_z++; // data_y增加
                     }
@@ -247,10 +247,10 @@ void ChiliAPM::YOLODetectTaskReg()
                 cv::drawContours(frame, contours, -1, cv::Scalar(0, 255, 0), 2); // 使用绿色绘制所有轮廓
 
                 DC.detected_area = DC.max_conf_rect.width * DC.max_conf_rect.height; // 计算识别框的面积
-                if (MTF02_Data.Distance<DC.Distance_Target & DC.totalRedArea> DC.totalRedArea_Target & MTF02_Data.Distance != 0)
+                if (MTF02_Data.Distance<DC.Distance_Target & DC.totalRedArea> DC.totalRedArea_Target & MTF02_Data.Distance != 0 & MTF02_Data.Distance> DC.Distance_Back )
                 {
                     auto now = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCutTime).count() > 10)
+                    if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCutTime).count() > 7)
                     {
                         cut_mode = 1;
                         lastCutTime = now; // 更新时间戳
@@ -260,13 +260,15 @@ void ChiliAPM::YOLODetectTaskReg()
                         cut_mode = 0;
                     }
                 }
-                else if (MTF02_Data.Distance < DC.Distance_Back)
+                else if (MTF02_Data.Distance < DC.Distance_Back & MTF02_Data.Distance != 0)
                 {
                     DP.chili_y = 3;
                 }
                 else
                 {
                     cut_mode = 0;
+                    DP.chili_y = 2;
+
                 }
 
                 cv::imshow("yolov5", frame);
@@ -468,7 +470,7 @@ void ChiliAPM::TaskThreadPrint()
         std::cout << std::setw(7) << std::setfill(' ') << " DC.totalRedArea_Target " << DC.totalRedArea_Target << "\r\n";
         std::cout << std::setw(7) << std::setfill(' ') << " DC.Distance_Back " << DC.Distance_Back << "\r\n";
         std::cout << "chili_z: " << DP.chili_z << "\r\n";
-        std::cout << "chili_x: " << DP.chili_x << "\r\n";
+        std::cout << "chili_y: " << DP.chili_y << "\r\n";
         usleep(10000);
     }
 }

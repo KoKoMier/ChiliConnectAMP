@@ -11,6 +11,6 @@
     "detected_area_max": 20000,
     "Distance_Target":45,
     "Distance_Back":10,
-    "totalRedArea_Target":10000
+    "totalRedArea_Target":20000
 
 }
