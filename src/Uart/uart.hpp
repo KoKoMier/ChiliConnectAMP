@@ -7,7 +7,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 /**
  *串口发送数据函数
  *fd：串口描述符
@@ -19,6 +18,7 @@ int serial_write(int fd, char *data, int datalen)
     int len = 0;
     // 获取实际传输数据的长度
     len = write(fd, data, datalen);
+    // printf("send data OK! datalen=%d\n", len);
     return len;
 }
 
@@ -29,9 +29,11 @@ int serial_write(int fd, char *data, int datalen)
 int serial_read(int fd, char buff[], int datalen)
 {
     int nread = 0;
+    printf("Ready for receiving data...");
     nread = read(fd, buff, datalen);
     if (nread > 0)
     {
+        printf("readlength=%d\n", nread);
         buff[nread] = '\0';
         printf("%s\n", buff);
     }

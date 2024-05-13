@@ -43,6 +43,7 @@ int main(int argc, char **argv)
         {
             ChiliAPM APM_Settle;    
             APM_Settle.Uartsend_test();
+
         }
         break;
         case 'j':

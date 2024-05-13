@@ -65,8 +65,9 @@ protected:
         int chili_x = 0;
         int chili_y = 0;
         int chili_z = 0;
-        bool chili_cut = 0;
-        char data_uart[6] = {01, 02, 0, 0, 0, 0};
+        int chili_cut = 0;
+        char data_uart[6] = {01, 02, 155, 0, 0, 0};
+        char data_uartread[6] = {0, 0, 0, 0, 0, 0};
         int chili_x_compensation = 0;
         int chili_y_compensation = 0;
         int chili_z_compensation = 0;
@@ -109,6 +110,7 @@ private:
     MTF02 *mtf02Test;
     MTF02::MTF02Data MTF02_Data;
     int cut_mode = 0;
+    int mode = 0;
 };
 
 ChiliAPM::~ChiliAPM()
@@ -177,6 +179,7 @@ void ChiliAPM::YOLODetectTaskReg()
                 std::cout << "Could not open the output video file for write\n";
             }
             DP.chili_y = configSettle("../Chili.json", "chili_y");
+            DP.chili_x = configSettle("../Chili.json", "chili_x");
             while (true)
             {
                 cv::Mat frame;
@@ -218,7 +221,7 @@ void ChiliAPM::YOLODetectTaskReg()
                     {
                         DP.chili_x++; // 计数器加一
                     }
-                    if (DC.max_conf_rect.y + DC.max_conf_rect.height / 2 < 0.66 * frame.rows ) // 如果物体在图像中间的上面部分
+                    if (DC.max_conf_rect.y + DC.max_conf_rect.height / 2 < frame.rows * 0.66) // 如果物体在图像中间的上面部分
                     {
                         DP.chili_z++; // data_y增加
                     }
@@ -227,6 +230,9 @@ void ChiliAPM::YOLODetectTaskReg()
                         DP.chili_z--; // data_y减少
                     }
                 }
+                // std::cout << "rame.rows: " << frame.rows<< "\r\n"; //720
+                // std::cout << "rame.cols: " << frame.cols<< "\r\n"; //1280
+
                 // 用于计算红色的面积
                 cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
                 cv::inRange(hsv, cv::Scalar(0, 70, 50), cv::Scalar(10, 255, 255), mask1);    // 红色的低范围阈值
@@ -247,31 +253,49 @@ void ChiliAPM::YOLODetectTaskReg()
                 cv::drawContours(frame, contours, -1, cv::Scalar(0, 255, 0), 2); // 使用绿色绘制所有轮廓
 
                 DC.detected_area = DC.max_conf_rect.width * DC.max_conf_rect.height; // 计算识别框的面积
-                if (MTF02_Data.Distance<DC.Distance_Target & DC.totalRedArea> DC.totalRedArea_Target & MTF02_Data.Distance != 0 & MTF02_Data.Distance> DC.Distance_Back )
+
+                if (DP.data_uartread[0] == 1)
                 {
-                    auto now = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCutTime).count() > 7)
+                    mode = 0;
+                }
+
+                cv::Mat centerRedMask = mask(cv::Rect(frame.cols / 2 - 20, frame.rows / 2 - 20, 40, 40));
+                bool hasRedInCenter = cv::countNonZero(centerRedMask) > 0;
+                if (DC.max_conf_rect.width * DC.max_conf_rect.height > 40 * 130 & DC.max_conf_rect.width * DC.max_conf_rect.height != 0 && hasRedInCenter)
+                {
+                    mode = 1;
+                }
+
+                if (mode == 1)
+                {
+                    if (MTF02_Data.Distance < DC.Distance_Target && DC.totalRedArea > DC.totalRedArea_Target && MTF02_Data.Distance != 0 && MTF02_Data.Distance > DC.Distance_Back)
                     {
-                        cut_mode = 1;
-                        lastCutTime = now; // 更新时间戳
+                        auto now = std::chrono::steady_clock::now();
+                        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastCutTime).count() > 7)
+                        {
+                            DP.chili_cut = 1;  // 夹取并收回
+                            lastCutTime = now; // 更新时间戳
+                            mode = 0;
+                        }
+                        else
+                        {
+                            DP.chili_cut = 3; // 机械臂向前
+                        }
+                    }
+                    else if (MTF02_Data.Distance < DC.Distance_Back & MTF02_Data.Distance != 0)
+                    {
+                        DP.chili_cut = 4; // 强制收回
                     }
                     else
                     {
-                        cut_mode = 0;
+                        DP.chili_cut = 3;
                     }
-                }
-                else if (MTF02_Data.Distance < DC.Distance_Back & MTF02_Data.Distance != 0)
-                {
-                    DP.chili_y = 3;
                 }
                 else
                 {
-                    cut_mode = 0;
-                    DP.chili_y = 2;
-
+                    DP.chili_cut = 0;
                 }
-
-                cv::imshow("yolov5", frame);
+                // cv::imshow("yolov5", frame);
                 writer.write(frame);
 
                 DC.key = cv::waitKey(1);
@@ -295,19 +319,12 @@ void ChiliAPM::UartSendTaskReg()
     TF.UARTFlow.reset(new FlowThread(
         [&]
         {
-            DP.data_uart[2] = (DP.chili_x + DP.chili_x_compensation < -127) ? -127 : (DP.chili_x + DP.chili_x_compensation > 127 ? 127 : DP.chili_x + DP.chili_x_compensation);
-            DP.data_uart[3] = (DP.chili_y + DP.chili_y_compensation < -127) ? -127 : (DP.chili_y + DP.chili_y_compensation > 127 ? 127 : DP.chili_y + DP.chili_y_compensation);
-            DP.data_uart[4] = (DP.chili_z + DP.chili_z_compensation < -127) ? -127 : (DP.chili_z + DP.chili_z_compensation > 127 ? 127 : DP.chili_z + DP.chili_z_compensation);
-            if (cut_mode)
-            {
-                DP.chili_cut = 1;
-            }
-            else
-            {
-                DP.chili_cut = 0;
-            }
+            DP.data_uart[2] = (DP.chili_x + DP.chili_x_compensation < 0) ? 0 : (DP.chili_x + DP.chili_x_compensation > 255 ? 255 : DP.chili_x + DP.chili_x_compensation);
+            DP.data_uart[3] = (DP.chili_y + DP.chili_y_compensation < 0) ? 0 : (DP.chili_y + DP.chili_y_compensation > 255 ? 255 : DP.chili_y + DP.chili_y_compensation);
+            DP.data_uart[4] = (DP.chili_z + DP.chili_z_compensation < 0) ? 0 : (DP.chili_z + DP.chili_z_compensation > 255 ? 255 : DP.chili_z + DP.chili_z_compensation);
             DP.data_uart[5] = DP.chili_cut;
-            serial_write(DC.fd_uart, DP.data_uart, sizeof(data));
+            serial_write(DC.fd_uart, DP.data_uart, sizeof(DP.data_uart));
+            read(DC.fd_uart, DP.data_uartread, sizeof(DP.data_uartread));
         },
         TF._flag_Sys_CPU_Asign, TF._flag_UARTFlowFreq)); // 354696
 }
@@ -329,7 +346,52 @@ void ChiliAPM::Json_test()
 
 void ChiliAPM::Uartsend_test()
 {
-    serial_write(DC.uart_baud, DP.data_uart, 6);
+
+    int fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
+    char buff2[6] = {01, 02, 13, 0, 0, 0};
+    char buff[6] = {0, 0, 0, 0, 0, 0};
+    set_serial(fd, 115200, 8, 'N', 1);
+    while (true)
+    {
+        serial_write(fd, buff2, sizeof(buff2));
+        read(fd, DP.data_uartread, sizeof(DP.data_uartread));
+
+                if(DP.data_uartread[0] == 0x06 && DP.data_uartread[1] == 0x01)
+        {
+        std::cout << "data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[2])) << "\r\n";
+        std::cout << "data4: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[3])) << "\r\n";
+        std::cout << "data5: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[4])) << "\r\n";
+        std::cout << "data6: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[5])) << "\r\n";
+
+        usleep(20000);
+    }
+    }
+
+    // int fd = open("/dev/ttyUSB0",O_RDWR | O_NOCTTY);
+    // char buff[8];
+    // char buff2[8] = {0x86, 0x77,23,45,66,77,11,44};
+    // set_serial(fd,115200,8,'N',1);
+
+    // while(true)
+    // {
+    //     serial_write(fd ,buff2,8);
+    //     read(fd,buff,8);
+    //     if(buff[0] == 0x86 && buff[1] == 0x77)
+    //     {
+    //         std::cout<< "data: "<<int(buff[2]) << "\r\n";
+    //         std::cout<< "data: "<< int(buff[3]) << "\r\n";
+    //         std::cout<< "data: "<< int(buff[4]) << "\r\n";
+    //         std::cout<< "data: "<< int(buff[5]) << "\r\n";
+    //         std::cout<< "data: "<< int(buff[6]) << "\r\n";
+    //         std::cout<< "data: "<< int(buff[7]) << "\r\n";
+
+    //     }
+    //     else
+    //     {
+    //         std::cout << "帧头不正确！" << std::endl;
+    //     }
+    //     usleep(20000);
+    // }
 }
 
 void ChiliAPM::MTF02_test()
@@ -390,6 +452,12 @@ void ChiliAPM::UartKey_test()
             std::cout << "buff2[5]" << int(DP.data_uart[5]) << "\r\n";
             serial_write(DC.fd_uart, DP.data_uart, 6); // 开
         }
+        else if (DC.key == 'd')
+        {
+            DP.data_uart[5] = 3;
+            std::cout << "buff2[5]" << int(DP.data_uart[5]) << "\r\n";
+            serial_write(DC.fd_uart, DP.data_uart, 6); // 前
+        }
         else if (DC.key == 'z')
         {
             DP.data_uart[3] = 0;
@@ -422,7 +490,7 @@ void ChiliAPM::saftycheck()
         {
             int fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
             set_serial(fd, 115200, 8, 'N', 1);
-            char buff2[6] = {01, 02, 1, 0, 1, 0};
+            char buff2[6] = {01, 02, 145, 0, 0, 0};
             serial_write(fd, buff2, 6);
         }
         TF.UARTFlow.reset();
@@ -466,11 +534,14 @@ void ChiliAPM::TaskThreadPrint()
         std::cout << std::setw(7) << std::setfill(' ') << " Distance " << MTF02_Data.Distance << "\r\n";
         std::cout << std::setw(7) << std::setfill(' ') << " DC.totalRedArea " << DC.totalRedArea << "\r\n";
         std::cout << std::setw(7) << std::setfill(' ') << " DP.chili_cut " << DP.chili_cut << "\r\n";
-        std::cout << std::setw(7) << std::setfill(' ') << " DC.Distance_Target " << DC.Distance_Target << "\r\n";
-        std::cout << std::setw(7) << std::setfill(' ') << " DC.totalRedArea_Target " << DC.totalRedArea_Target << "\r\n";
-        std::cout << std::setw(7) << std::setfill(' ') << " DC.Distance_Back " << DC.Distance_Back << "\r\n";
-        std::cout << "chili_z: " << DP.chili_z << "\r\n";
-        std::cout << "chili_y: " << DP.chili_y << "\r\n";
+        std::cout <<  std::setw(7) << std::setfill(' ') <<"chili_y: " << DP.chili_y << "\r\n";
+        std::cout <<  std::setw(7) << std::setfill(' ') <<"chili_x: " << DP.chili_x << "\r\n";
+        std::cout <<  std::setw(7) << std::setfill(' ') <<"chili_z: " << DP.chili_z << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "mode: " << mode << "\r\n";
+        std::cout <<  std::setw(7) << std::setfill(' ') <<"DC.max_conf_rect.width : " << DC.max_conf_rect.width << "\r\n";
+        std::cout <<  std::setw(7) << std::setfill(' ') <<"DC.max_conf_rect.height : " << DC.max_conf_rect.height << "\r\n";
+        std::cout <<  std::setw(7) << std::setfill(' ') <<"data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[3])) << "\r\n";
+
         usleep(10000);
     }
 }
