@@ -68,6 +68,8 @@ protected:
         int chili_cut = 0;
         char data_uart[6] = {01, 02, 155, 0, 0, 0};
         char data_uartread[6] = {0, 0, 0, 0, 0, 0};
+        char data_uartread2[1] = {0};
+        char data_uartread3[1] = {0};
         int chili_x_compensation = 0;
         int chili_y_compensation = 0;
         int chili_z_compensation = 0;
@@ -160,6 +162,7 @@ void ChiliAPM::YOLODetectTaskReg()
     TF.YOLOFlow.reset(new FlowThread(
         [&]
         {
+            auto start = std::chrono::high_resolution_clock::now(); // 开始时间
             YOLOV5 yolo;
             yolo_data data;
             capture.open(capture_id);
@@ -254,10 +257,7 @@ void ChiliAPM::YOLODetectTaskReg()
 
                 DC.detected_area = DC.max_conf_rect.width * DC.max_conf_rect.height; // 计算识别框的面积
 
-                if (DP.data_uartread[0] == 1)
-                {
-                    mode = 0;
-                }
+  
 
                 cv::Mat centerRedMask = mask(cv::Rect(frame.cols / 2 - 20, frame.rows / 2 - 20, 40, 40));
                 bool hasRedInCenter = cv::countNonZero(centerRedMask) > 0;
@@ -265,7 +265,10 @@ void ChiliAPM::YOLODetectTaskReg()
                 {
                     mode = 1;
                 }
-
+                if (int((DP.data_uartread[0])) == 0x02)
+                {
+                    mode = 0;
+                }
                 if (mode == 1)
                 {
                     if (MTF02_Data.Distance < DC.Distance_Target && DC.totalRedArea > DC.totalRedArea_Target && MTF02_Data.Distance != 0 && MTF02_Data.Distance > DC.Distance_Back)
@@ -275,7 +278,6 @@ void ChiliAPM::YOLODetectTaskReg()
                         {
                             DP.chili_cut = 1;  // 夹取并收回
                             lastCutTime = now; // 更新时间戳
-                            mode = 0;
                         }
                         else
                         {
@@ -295,7 +297,7 @@ void ChiliAPM::YOLODetectTaskReg()
                 {
                     DP.chili_cut = 0;
                 }
-                // cv::imshow("yolov5", frame);
+                cv::imshow("yolov5", frame);
                 writer.write(frame);
 
                 DC.key = cv::waitKey(1);
@@ -309,6 +311,9 @@ void ChiliAPM::YOLODetectTaskReg()
                     capture.release();
                     break;
                 }
+                auto end = std::chrono::high_resolution_clock::now();            // 结束时间
+                std::chrono::duration<double, std::milli> elapsed = end - start; // 计算时间差
+                // std::cout << "Elapsed time: " << elapsed.count() << " ms\n";
             }
         },
         TF._flag_Sys_CPU_Asign, TF._flag_YOLOFlowFreq)); // 135156
@@ -319,13 +324,31 @@ void ChiliAPM::UartSendTaskReg()
     TF.UARTFlow.reset(new FlowThread(
         [&]
         {
-            DP.data_uart[2] = (DP.chili_x + DP.chili_x_compensation < 0) ? 0 : (DP.chili_x + DP.chili_x_compensation > 255 ? 255 : DP.chili_x + DP.chili_x_compensation);
+            DP.data_uart[2] = (DP.chili_x + DP.chili_x_compensation < 128) ? 128 : (DP.chili_x + DP.chili_x_compensation > 255 ? 255 : DP.chili_x + DP.chili_x_compensation);
             DP.data_uart[3] = (DP.chili_y + DP.chili_y_compensation < 0) ? 0 : (DP.chili_y + DP.chili_y_compensation > 255 ? 255 : DP.chili_y + DP.chili_y_compensation);
             DP.data_uart[4] = (DP.chili_z + DP.chili_z_compensation < 0) ? 0 : (DP.chili_z + DP.chili_z_compensation > 255 ? 255 : DP.chili_z + DP.chili_z_compensation);
             DP.data_uart[5] = DP.chili_cut;
             serial_write(DC.fd_uart, DP.data_uart, sizeof(DP.data_uart));
-            read(DC.fd_uart, DP.data_uartread, sizeof(DP.data_uartread));
-        },
+            read(DC.fd_uart, DP.data_uartread2, sizeof(DP.data_uartread2));
+            if (int(DP.data_uartread2[0]) == 0x01)
+            {
+                usleep(10000);
+                read(DC.fd_uart, DP.data_uartread3, sizeof(DP.data_uartread3));
+                if (int(DP.data_uartread3[0]) == 0x02)
+                {
+                    usleep(10000);
+                    read(DC.fd_uart, DP.data_uartread, sizeof(DP.data_uartread));
+
+                    // std::cout << "data1: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[0])) << "\r\n";
+                    // std::cout << "data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[1])) << "\r\n";
+                    // std::cout << "data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[2])) << "\r\n";
+                    // std::cout << "data4: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[3])) << "\r\n";
+
+                };
+            }
+            // }
+            usleep(10000);
+                },
         TF._flag_Sys_CPU_Asign, TF._flag_UARTFlowFreq)); // 354696
 }
 
@@ -349,48 +372,57 @@ void ChiliAPM::Uartsend_test()
 
     int fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY);
     char buff2[6] = {01, 02, 13, 0, 0, 0};
-    char buff[6] = {0, 0, 0, 0, 0, 0};
+    char buff[2] = {0, 0};
     set_serial(fd, 115200, 8, 'N', 1);
     while (true)
     {
-        serial_write(fd, buff2, sizeof(buff2));
-        read(fd, DP.data_uartread, sizeof(DP.data_uartread));
+        read(fd, DP.data_uartread2, sizeof(DP.data_uartread2));
 
-                if(DP.data_uartread[0] == 0x06 && DP.data_uartread[1] == 0x01)
+        if (int(DP.data_uartread2[0]) == 0x01)
         {
-        std::cout << "data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[2])) << "\r\n";
-        std::cout << "data4: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[3])) << "\r\n";
-        std::cout << "data5: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[4])) << "\r\n";
-        std::cout << "data6: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[5])) << "\r\n";
+            read(fd, DP.data_uartread3, sizeof(DP.data_uartread3));
+            if (int(DP.data_uartread3[0]) == 0x02)
+            {
+                read(fd, DP.data_uartread, sizeof(DP.data_uartread));
 
-        usleep(20000);
+                // std::cout << "data1: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[0])) << "\r\n";
+                // std::cout << "data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[1])) << "\r\n";
+                // std::cout << "data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[2])) << "\r\n";
+                // std::cout << "data4: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[3])) << "\r\n";
+
+                usleep(10000);
+            };
+            usleep(10000);
+        }
+        // }
+        usleep(10000);
     }
-    }
 
-    // int fd = open("/dev/ttyUSB0",O_RDWR | O_NOCTTY);
-    // char buff[8];
-    // char buff2[8] = {0x86, 0x77,23,45,66,77,11,44};
-    // set_serial(fd,115200,8,'N',1);
-
-    // while(true)
+    // while (true)
     // {
-    //     serial_write(fd ,buff2,8);
-    //     read(fd,buff,8);
-    //     if(buff[0] == 0x86 && buff[1] == 0x77)
-    //     {
-    //         std::cout<< "data: "<<int(buff[2]) << "\r\n";
-    //         std::cout<< "data: "<< int(buff[3]) << "\r\n";
-    //         std::cout<< "data: "<< int(buff[4]) << "\r\n";
-    //         std::cout<< "data: "<< int(buff[5]) << "\r\n";
-    //         std::cout<< "data: "<< int(buff[6]) << "\r\n";
-    //         std::cout<< "data: "<< int(buff[7]) << "\r\n";
+    //     // serial_write(fd, buff2, sizeof(buff2));
+    //     char buffer1;
+    //     read(fd, &buffer1, sizeof(1));
+    //     std::cout << "data1: " << std::hex << static_cast<int>(static_cast<unsigned char>(buffer1)) << "\r\n";
 
-    //     }
-    //     else
+    //     if (int(buffer1) == 0x01)
     //     {
-    //         std::cout << "帧头不正确！" << std::endl;
+    //         char buffer2;
+    //         read(fd, &buffer2, sizeof(1));
+    //         std::cout << "data2: " << std::hex << static_cast<int>(static_cast<unsigned char>(buffer2)) << "\r\n";
+
+    //         if (int(buffer2) == 0x02)
+    //         {
+    //             read(fd, DP.data_uartread, sizeof(DP.data_uartread));
+
+    //             std::cout << "data1: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[0])) << "\r\n";
+    //             std::cout << "data2: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[1])) << "\r\n";
+    //             std::cout << "data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[2])) << "\r\n";
+    //             std::cout << "data4: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[3])) << "\r\n";
+
+    //             usleep(20000);
+    //         }
     //     }
-    //     usleep(20000);
     // }
 }
 
@@ -534,13 +566,16 @@ void ChiliAPM::TaskThreadPrint()
         std::cout << std::setw(7) << std::setfill(' ') << " Distance " << MTF02_Data.Distance << "\r\n";
         std::cout << std::setw(7) << std::setfill(' ') << " DC.totalRedArea " << DC.totalRedArea << "\r\n";
         std::cout << std::setw(7) << std::setfill(' ') << " DP.chili_cut " << DP.chili_cut << "\r\n";
-        std::cout <<  std::setw(7) << std::setfill(' ') <<"chili_y: " << DP.chili_y << "\r\n";
-        std::cout <<  std::setw(7) << std::setfill(' ') <<"chili_x: " << DP.chili_x << "\r\n";
-        std::cout <<  std::setw(7) << std::setfill(' ') <<"chili_z: " << DP.chili_z << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "chili_y: " << DP.chili_y << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "chili_x: " << DP.chili_x << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "chili_z: " << DP.chili_z << "\r\n";
         std::cout << std::setw(7) << std::setfill(' ') << "mode: " << mode << "\r\n";
-        std::cout <<  std::setw(7) << std::setfill(' ') <<"DC.max_conf_rect.width : " << DC.max_conf_rect.width << "\r\n";
-        std::cout <<  std::setw(7) << std::setfill(' ') <<"DC.max_conf_rect.height : " << DC.max_conf_rect.height << "\r\n";
-        std::cout <<  std::setw(7) << std::setfill(' ') <<"data3: " << std::hex << static_cast<int>(static_cast<unsigned char>(DP.data_uartread[3])) << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "DC.max_conf_rect.width : " << DC.max_conf_rect.width << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "DC.max_conf_rect.height : " << DC.max_conf_rect.height << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "data1: " << std::hex << int((DP.data_uartread[0])) << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "data2: " << std::hex << int((DP.data_uartread[1])) << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "data3: " << std::hex << int((DP.data_uartread[2])) << "\r\n";
+        std::cout << std::setw(7) << std::setfill(' ') << "data4: " << std::hex << int((DP.data_uartread[3])) << "\r\n";
 
         usleep(10000);
     }
